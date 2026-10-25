@@ -1,0 +1,3 @@
+# Runtime dependencies. Installing this file performs an editable
+# install of the package together with everything in [project.dependencies].
+-e .

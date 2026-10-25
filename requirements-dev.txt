@@ -1,0 +1,3 @@
+# Development dependencies. Editable install plus everything in
+# [project.optional-dependencies.dev] (test runner, linters, ...).
+-e .[dev]

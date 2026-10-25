@@ -1,0 +1,2 @@
+# Keeps the output/ directory in version control.
+# Generated reports placed here are ignored by .gitignore and never committed.

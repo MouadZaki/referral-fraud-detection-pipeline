@@ -1,0 +1,2 @@
+# Keeps the data/raw/ directory in version control.
+# CSV extracts placed here are ignored by .gitignore and never committed.

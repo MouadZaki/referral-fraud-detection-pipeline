@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "referral-fraud-detection"
+version = "0.1.0"
+description = "Pipeline that profiles, joins, and scores referral-program rewards for fraud signals (Stage 0 take-home)."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+referral-pipeline = "referral_pipeline.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
