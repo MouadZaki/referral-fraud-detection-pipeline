@@ -1,8 +1,19 @@
 """Command-line entry point for the referral fraud-detection pipeline.
 
-This is a scaffold only. Later milestones add CSV profiling, data
-preparation and joins, business-rule validation, and the reward report
-containing the ``is_business_logic_valid`` flag.
+Implemented stages:
+
+- profiling of the seven source CSV extracts (availability, row counts,
+  columns, dtypes, missing values, distinct counts, duplicates), logged
+  to the console and written to ``<output-dir>/profile_summary.csv``;
+- preparation of the referral-detail dataset: cleaning, type coercion,
+  UTC -> local timestamps, documented joins, deduplication,
+  ``referral_source_category`` - written to
+  ``<output-dir>/referral_details_prepared.csv``;
+- business-rule scoring: ``is_business_logic_valid`` computed per
+  referral detail (invalid conditions override valid ones) and the
+  report written to ``<output-dir>/<report-name>``.
+
+Later milestones add Docker support and documentation deliverables.
 """
 
 from __future__ import annotations
@@ -11,29 +22,35 @@ import argparse
 import logging
 from pathlib import Path
 
+from referral_pipeline.preparation import (
+    build_referral_details,
+    write_prepared_details,
+)
+from referral_pipeline.rules import (
+    apply_business_rules,
+    build_report,
+    write_report,
+)
+from referral_pipeline.profiling import (
+    log_profiles,
+    profile_csvs,
+    write_profile_summary,
+)
+
 LOGGER = logging.getLogger("referral_pipeline")
 
 DEFAULT_DATA_DIR = Path("data") / "raw"
 DEFAULT_OUTPUT_DIR = Path("output")
 DEFAULT_REPORT_NAME = "referral_report.csv"
 
-EXPECTED_CSVS = (
-    "user_referrals.csv",
-    "user_referral_logs.csv",
-    "user_logs.csv",
-    "user_referral_statuses.csv",
-    "referral_rewards.csv",
-    "paid_transactions.csv",
-    "lead_logs.csv",
-)
-
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="referral-pipeline",
         description=(
-            "Profile seven referral-program CSV extracts, join and clean "
-            "them, apply business rules, and write a reward report."
+            "Profile seven referral-program CSV extracts and build the "
+            "prepared referral-detail dataset (joins, cleaning, UTC->local "
+            "timestamps, referral_source_category)."
         ),
     )
     parser.add_argument(
@@ -56,13 +73,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def check_source_files(data_dir: Path) -> tuple[list[str], list[str]]:
-    """Split EXPECTED_CSVS into (found, missing) based on data_dir contents."""
-    found = [name for name in EXPECTED_CSVS if (data_dir / name).is_file()]
-    missing = [name for name in EXPECTED_CSVS if name not in found]
-    return found, missing
-
-
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(
@@ -70,25 +80,27 @@ def main(argv: list[str] | None = None) -> int:
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    LOGGER.info("Looking for source CSVs in %s", args.data_dir)
-    found, missing = check_source_files(args.data_dir)
-    for name in found:
-        LOGGER.info("  found    %s", name)
-    for name in missing:
-        LOGGER.warning("  missing  %s", name)
+    LOGGER.info("Profiling source CSVs in %s", args.data_dir)
+    profiles = profile_csvs(args.data_dir)
+    log_profiles(profiles)
+    write_profile_summary(profiles, args.output_dir)
 
-    if missing:
-        LOGGER.warning(
-            "%d of %d expected CSVs are absent from %s "
-            "(see data/README.md for the expected inputs).",
-            len(missing),
-            len(EXPECTED_CSVS),
-            args.data_dir,
+    LOGGER.info("Building prepared referral-detail dataset")
+    prepared = build_referral_details(args.data_dir)
+    if prepared is None:
+        LOGGER.error(
+            "Prepared dataset not produced - see missing/unreadable "
+            "input errors above."
         )
+        return 1
+    write_prepared_details(prepared, args.output_dir)
 
+    LOGGER.info("Applying business rules")
+    scored = apply_business_rules(prepared)
+    write_report(build_report(scored), args.output_dir, args.report_name)
     LOGGER.info(
-        "Scaffold only: profiling, joins, business rules, and report "
-        "generation (%s) are implemented in later milestones.",
+        "Done: %d referral-detail rows scored, report written to %s",
+        len(scored),
         args.output_dir / args.report_name,
     )
     return 0
