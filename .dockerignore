@@ -1,0 +1,47 @@
+# Docker build context: keep the image free of data, outputs and
+# credentials. Source CSVs and reports travel via bind mounts only.
+
+# Source CSVs anywhere (data/raw/, ad-hoc copies) and generated reports
+**/*.csv
+data/
+output/
+
+# Git and CI metadata
+.git/
+.gitignore
+.gitattributes
+
+# Python artifacts and virtual environments
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Tests and docs not needed at runtime
+tests/
+*.md
+data/README.md
+
+# Credentials / secrets / environment files
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.crt
+credentials*
+
+# IDE / OS noise
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Docker files themselves
+Dockerfile
+.dockerignore

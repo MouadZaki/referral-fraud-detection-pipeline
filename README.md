@@ -5,12 +5,13 @@ referral-program CSV extracts, joins and cleans them, applies business
 rules to flag valid or potentially fraudulent rewards, and produces a
 CSV report containing an `is_business_logic_valid` flag.
 
-> **Status: profiling + preparation + scoring implemented.** The entry
-> point profiles the seven source CSVs, builds the prepared
+> **Status: profiling + preparation + scoring + Docker implemented.**
+> The entry point profiles the seven source CSVs, builds the prepared
 > referral-detail dataset, scores each row with
 > `is_business_logic_valid` (invalid conditions override valid ones),
-> and writes the report. Docker support and the final documentation
-> deliverables are added in later milestones.
+> and writes the report — run it locally or via the included Dockerfile
+> (see *Run with Docker*). Final documentation deliverables are added
+> in later milestones.
 
 ## Project layout
 
@@ -27,7 +28,10 @@ Fraud Detection/
 │       ├── profiling.py     # source CSV profiling
 │       ├── preparation.py   # cleaning, joins, prepared referral details
 │       └── rules.py         # is_business_logic_valid + report
+├── tests/                   # pytest suite (fixture-based, no real CSVs)
+├── .dockerignore            # keeps data/output/secrets out of images
 ├── .gitignore
+├── Dockerfile               # pandas + pyspark image, bind-mount I/O
 ├── pyproject.toml
 ├── requirements.txt         # editable install + runtime deps
 ├── requirements-dev.txt     # editable install + dev deps
@@ -78,11 +82,60 @@ Both flags are optional and default to `data/raw` and `output`.
 `--report-name` overrides the report filename (default
 `referral_report.csv`).
 
-Each run logs a per-table profile — availability, row count, duplicate
-rows, per-column dtype/missing-value stats, and distinct value counts —
-and writes a flattened summary to `output/profile_summary.csv`. Missing
-or unreadable files are logged as warnings/errors and are never filled
-with invented data.
+Each run first verifies all seven documented CSVs exist in
+`--data-dir`; if any are absent it logs the missing names and exits
+nonzero without writing anything (see *Run with Docker* for the
+filenames). It then logs a per-table profile — availability, row
+count, duplicate rows, per-column dtype/missing-value stats, and
+distinct value counts — and writes a flattened summary to
+`output/profile_summary.csv`. Unreadable files are logged as
+warnings/errors and are never filled with invented data.
+
+## Run with Docker
+
+The image installs the package with Pandas plus PySpark (required by
+the assignment; the pipeline itself remains a Pandas implementation
+and never starts a Spark session, so no JRE is bundled). Source CSVs
+are **not** baked into the image — they arrive via bind mounts, and
+the report is written back to the host.
+
+**Build** (from the project root):
+
+```bash
+docker build -t referral-fraud .
+```
+
+**Run** — mount the host's `data/raw` read-only at `/data` and `output`
+at `/output`:
+
+```bash
+# bash
+docker run --rm \
+  -v "$PWD/data/raw:/data:ro" \
+  -v "$PWD/output:/output" \
+  referral-fraud
+```
+
+```powershell
+# PowerShell
+docker run --rm `
+  -v "${PWD}/data/raw:/data:ro" `
+  -v "${PWD}/output:/output" `
+  referral-fraud
+```
+
+- **Required inputs** (all seven, in `data/raw/`): `user_referrals.csv`,
+  `user_referral_logs.csv`, `user_logs.csv`,
+  `user_referral_statuses.csv`, `referral_rewards.csv`,
+  `paid_transactions.csv`, `lead_logs.csv`. If any is missing, the
+  container logs which ones and exits nonzero without writing output.
+- **Host-side output:** `output/referral_report.csv` (plus
+  `profile_summary.csv` and `referral_details_prepared.csv`) appears
+  in the host's `output/` directory — the container only writes
+  through the bind mount.
+- **Defaults:** the image's `CMD` passes `--data-dir /data`
+  `--output-dir /output`. Append flags after the image name to
+  override, e.g. `... referral-fraud --report-name alt_report.csv`.
 
 It then builds the prepared referral-detail dataset and writes it to
 `output/referral_details_prepared.csv`:
@@ -134,10 +187,11 @@ with the brief's column list. Rules semantics:
 - **Nulls never satisfy a condition**, except where null *is* the
   condition ("no reward value", "no transaction id").
 
-If a required input (`user_referrals`, `user_referral_logs`) is absent
-or structurally invalid, the dataset is not produced and the error is
-logged — no partial or fabricated output. The CLI exits nonzero in
-that case.
+If any documented input is absent, the run exits nonzero up front
+(nothing is written). If a required table
+(`user_referrals`, `user_referral_logs`) is unreadable or
+structurally invalid, the dataset is not produced and the error is
+logged — no partial or fabricated output.
 
 ## Assumptions and open questions
 

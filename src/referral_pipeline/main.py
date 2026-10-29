@@ -13,7 +13,8 @@ Implemented stages:
   referral detail (invalid conditions override valid ones) and the
   report written to ``<output-dir>/<report-name>``.
 
-Later milestones add Docker support and documentation deliverables.
+Docker support is provided by the repository Dockerfile; final
+documentation deliverables are added in later milestones.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from referral_pipeline.rules import (
     write_report,
 )
 from referral_pipeline.profiling import (
+    EXPECTED_CSVS,
     log_profiles,
     profile_csvs,
     write_profile_summary,
@@ -79,6 +81,23 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.INFO,
         format="%(levelname)s %(name)s: %(message)s",
     )
+
+    # Fail clearly before doing any work when documented inputs are
+    # absent (e.g. a Docker run without the data bind mount).
+    missing = [
+        name
+        for name in EXPECTED_CSVS
+        if not (args.data_dir / name).is_file()
+    ]
+    if missing:
+        LOGGER.error(
+            "Missing required input CSV(s) in %s: %s. Place all seven "
+            "documented extracts there (see data/README.md) or point "
+            "--data-dir at the directory containing them.",
+            args.data_dir,
+            ", ".join(missing),
+        )
+        return 1
 
     LOGGER.info("Profiling source CSVs in %s", args.data_dir)
     profiles = profile_csvs(args.data_dir)
