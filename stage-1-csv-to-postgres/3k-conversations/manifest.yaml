@@ -1,0 +1,34 @@
+# Stage 1 dataset manifest — 3K Conversations Dataset for ChatBot.
+# Records the dataset identity, source and status required by the
+# Stage 1 brief ("dataset name, source, owner, status").
+
+dataset: 3k-conversations
+name: "3K Conversations Dataset for ChatBot"
+
+source:
+  platform: Kaggle
+  url: https://www.kaggle.com/datasets/kreeshrajani/3k-conversations-dataset-for-chatbot
+  owner: kreeshrajani          # Kaggle user slug taken from the URL
+
+# Status listed for this dataset in the Stage 1 dataset list. The
+# merged table entry carries two original row codes, both Done.
+status: Done
+dataset_list_codes: [107, 134]
+
+license: "Other (specified in description)"
+license_note: >-
+  Kaggle lists the license as "Other (specified in description)".
+  The dataset description provided does NOT state the underlying
+  terms; they are not inferred here and must be confirmed before any
+  use beyond this exercise.
+
+file:
+  name: Conversation.csv       # downloaded extract; kept out of Git
+  rows: 3725                   # data rows (3,726 lines incl. header)
+  encoding: utf-8
+
+description: >-
+  Question/answer conversation pairs for research or training of
+  natural language processing (NLP) models — casual or formal
+  discussions, interviews, customer service interactions, or social
+  media conversations.

@@ -1,0 +1,2 @@
+# Source CSV extracts are never committed — download locally instead.
+*.csv
