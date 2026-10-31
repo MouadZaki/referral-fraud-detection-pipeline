@@ -30,9 +30,13 @@ data/raw/*
 output/*
 !output/.gitkeep
 
+# --- Airflow runtime logs (Stage 1 compose mount) ---
+stage-1-csv-to-postgres/logs/
+
 # --- Credentials & secrets ---
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 *.crt
