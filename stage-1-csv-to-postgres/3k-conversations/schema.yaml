@@ -1,0 +1,39 @@
+# Stage 1 schema for Conversation.csv (3K Conversations dataset).
+# Validation compares `raw_header` positionally against the actual CSV
+# header line, then applies the `columns` contract below.
+
+dataset: 3k-conversations
+source_file: Conversation.csv
+row_count: 3725                 # expected data rows, verified from the file
+
+# Header exactly as it appears in the raw CSV, in column order.
+# IMPORTANT: the first header cell is genuinely blank in the source
+# file (the line reads `,question,answer`). It is NOT a missing-name
+# error — it maps to `source_row_id` below.
+raw_header:
+  - ""                          # blank first header -> source_row_id
+  - question
+  - answer
+
+primary_key: [source_row_id]
+
+columns:
+  - name: source_row_id
+    source_column: ""           # raw header is a blank string
+    type: integer
+    nullable: false
+    unique: true
+    description: >-
+      Row index from the source file (0-3724). This is a SOURCE ROW
+      INDEX, not a domain identifier — it carries no business meaning
+      and must not be treated as one. Preserved as the primary key.
+  - name: question
+    source_column: question
+    type: string
+    nullable: false
+    description: Conversation prompt / question text.
+  - name: answer
+    source_column: answer
+    type: string
+    nullable: false
+    description: Conversation response / answer text.
