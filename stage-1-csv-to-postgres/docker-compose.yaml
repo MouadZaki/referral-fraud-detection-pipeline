@@ -1,0 +1,132 @@
+# Stage 1, Story 2 — local Airflow + PostgreSQL stack.
+#
+# Follows the official Apache Airflow docker-compose guidance
+# (airflow-init -> webserver + scheduler, postgres metadata DB),
+# simplified to LocalExecutor — no Redis/Celery needed for this
+# single-DAG local exercise.
+#
+# Two PostgreSQL services on purpose:
+#   airflow-postgres — Airflow's own metadata database (internal)
+#   postgres-target  — the database the Story 3 DAG loads data into
+#
+# All connection values come from .env (copy .env.example). The raw
+# dataset folder is mounted read-only; the CSV itself is not in Git.
+
+x-airflow-common: &airflow-common
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.11.0-python3.11}
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD:?Set AIRFLOW_DB_PASSWORD in .env}@airflow-postgres:5432/${AIRFLOW_DB_NAME}
+    # Dev only: no fernet key is acceptable for a local throwaway stack.
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    # Exposes the scheduler health server on :8974 (used by healthcheck).
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # Pre-created connection for the Story 3 DAG (conn_id: target_postgres).
+    AIRFLOW_CONN_TARGET_POSTGRES: postgresql://${TARGET_POSTGRES_USER}:${TARGET_POSTGRES_PASSWORD:?Set TARGET_POSTGRES_PASSWORD in .env}@${TARGET_POSTGRES_HOST}:${TARGET_POSTGRES_PORT}/${TARGET_POSTGRES_DB}
+    # Mounted dataset folder inside the containers (read-only).
+    DATASET_DIR: /opt/airflow/data/3k-conversations
+    # Story 3 will need pandas/PyYAML in the image; uncomment when the
+    # DAG is added (triggers a pip install at container start).
+    # _PIP_ADDITIONAL_REQUIREMENTS: 'pandas pyyaml'
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./3k-conversations:/opt/airflow/data/3k-conversations:ro
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+  user: "${AIRFLOW_UID:-50000}:0"
+
+services:
+  # --- Airflow's internal metadata database ---
+  airflow-postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ${AIRFLOW_DB_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:?Set AIRFLOW_DB_PASSWORD in .env}
+      POSTGRES_DB: ${AIRFLOW_DB_NAME}
+    volumes:
+      - airflow-postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  # --- Separate target database the DAG will load into ---
+  postgres-target:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${TARGET_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${TARGET_POSTGRES_PASSWORD:?Set TARGET_POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${TARGET_POSTGRES_DB}
+    ports:
+      - "5433:5432"      # host-side access for verification (avoid local 5432)
+    volumes:
+      - postgres-target-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  # --- One-shot init: migrations + admin user (official env-flag pattern) ---
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command: >-
+      -c '
+      mkdir -p /sources/logs /sources/dags /sources/plugins &&
+      chown -R "${AIRFLOW_UID}:0" /sources/{logs,dags,plugins} 2>/dev/null || true;
+      exec /entrypoint airflow version
+      '
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:?Set _AIRFLOW_WWW_USER_PASSWORD in .env}
+    user: "0:0"
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}:/sources
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  airflow-postgres-db-volume:
+  postgres-target-db-volume:
