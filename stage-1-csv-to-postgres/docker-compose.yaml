@@ -13,7 +13,12 @@
 # dataset folder is mounted read-only; the CSV itself is not in Git.
 
 x-airflow-common: &airflow-common
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.11.0-python3.11}
+  # Built from ./Dockerfile (apache/airflow:2.11.0-python3.11 + pinned
+  # DAG deps) — `docker compose up` builds it when absent.
+  image: ${AIRFLOW_IMAGE_NAME:-stage-1-airflow:2.11.0-py3.11}
+  build:
+    context: .
+    dockerfile: Dockerfile
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD:?Set AIRFLOW_DB_PASSWORD in .env}@airflow-postgres:5432/${AIRFLOW_DB_NAME}
@@ -27,9 +32,8 @@ x-airflow-common: &airflow-common
     AIRFLOW_CONN_TARGET_POSTGRES: postgresql://${TARGET_POSTGRES_USER}:${TARGET_POSTGRES_PASSWORD:?Set TARGET_POSTGRES_PASSWORD in .env}@${TARGET_POSTGRES_HOST}:${TARGET_POSTGRES_PORT}/${TARGET_POSTGRES_DB}
     # Mounted dataset folder inside the containers (read-only).
     DATASET_DIR: /opt/airflow/data/3k-conversations
-    # Story 3 will need pandas/PyYAML in the image; uncomment when the
-    # DAG is added (triggers a pip install at container start).
-    # _PIP_ADDITIONAL_REQUIREMENTS: 'pandas pyyaml'
+    # DAG runtime deps (pandas, PyYAML, psycopg2-binary) are baked
+    # into the image via the Dockerfile — no runtime pip installs.
   volumes:
     - ./dags:/opt/airflow/dags
     - ./3k-conversations:/opt/airflow/data/3k-conversations:ro
