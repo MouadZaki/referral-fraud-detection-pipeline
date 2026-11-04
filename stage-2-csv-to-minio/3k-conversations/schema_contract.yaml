@@ -1,0 +1,56 @@
+# Stage 2 schema contract for the 3K Conversations extract.
+# Declared here; ENFORCED by the future Stage 2 DAG before anything
+# reaches MinIO. Every rule below is a hard failure, not a warning —
+# the pipeline must refuse malformed input rather than land bad data.
+
+dataset: 3k-conversations
+source_file: dags/extraction/sample.csv   # extract location per Stage 2 brief
+encoding: utf-8
+row_count: 3725                # expected data rows (verified in Stage 1)
+
+# Exact raw header, in column order. The first cell is genuinely BLANK
+# in the source (the line reads `,question,answer`) — not a defect.
+# A missing, renamed, added, or reordered column breaks this check.
+raw_header:
+  - ""                         # blank first header -> source_row_id
+  - question
+  - answer
+
+primary_key: [source_row_id]
+
+columns:
+  - name: source_row_id
+    source_column: ""          # maps the blank raw header cell
+    type: integer
+    nullable: false
+    unique: true
+    min: 0                     # verified range in the extract
+    max: 3724
+    description: >-
+      Row index from the source file (0-3724). This is a SOURCE ROW
+      INDEX, not a domain identifier — it carries no business meaning
+      and must not be treated as one. Preserved as the primary key.
+  - name: question
+    source_column: question
+    type: string
+    nullable: false
+    empty_is_null: true        # "" and whitespace-only count as missing
+    description: Conversation prompt / question text.
+  - name: answer
+    source_column: answer
+    type: string
+    nullable: false
+    empty_is_null: true
+    description: Conversation response / answer text.
+
+# Machine-checkable failure conditions for the future DAG's validation
+# task. Any hit -> task fails with the rule name(s) in the message.
+fail_on:
+  - missing_source_file        # dags/extraction/sample.csv absent or unreadable
+  - header_mismatch            # raw header missing/renamed/added/reordered vs raw_header
+  - unexpected_row_count       # data rows != row_count
+  - missing_mapped_column      # a declared column has no matching raw header cell
+  - blank_required_value       # NULL/empty/whitespace in a nullable:false column
+  - invalid_type               # value cannot coerce to the declared type (e.g. non-integer id)
+  - out_of_range               # source_row_id outside [min, max]
+  - duplicate_primary_key      # source_row_id value repeats
