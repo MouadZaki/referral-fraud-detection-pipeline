@@ -1,0 +1,3 @@
+# Place the Stage 2 extract here as sample.csv (see
+# stage-2-csv-to-minio/3k-conversations/schema_contract.yaml).
+# *.csv in this folder is git-ignored.
