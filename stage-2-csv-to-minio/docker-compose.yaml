@@ -40,12 +40,14 @@ x-airflow-common: &airflow-common
     # client from these plain env vars (no Airflow connection URI, so
     # the password never sits inside a connection record/URI string).
     EXTRACTION_FILE: /opt/airflow/dags/extraction/sample.csv
+    CONTRACT_DIR: /opt/airflow/contracts
     MINIO_ENDPOINT: minio:9000
     MINIO_BUCKET: ${MINIO_BUCKET}
     MINIO_ROOT_USER: ${MINIO_ROOT_USER}
     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
   volumes:
     - ./dags:/opt/airflow/dags
+    - ./3k-conversations:/opt/airflow/contracts:ro
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
   user: "${AIRFLOW_UID:-50000}:0"
