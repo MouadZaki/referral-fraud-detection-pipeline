@@ -1,0 +1,4 @@
+# Stage 2 runtime artifacts and data extracts — never commit.
+# (.env is already covered by the root .env ignore rule.)
+logs/
+dags/extraction/*.csv
